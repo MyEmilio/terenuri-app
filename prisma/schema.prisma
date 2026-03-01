@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Land {
+  id              String   @id @default(cuid())
+  title           String
+  locality        String
+  link            String?
+  lat             Float
+  lng             Float
+  score           Int
+  negotiatedPrice Float?
+  confirmed       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  imagePath String?
+}

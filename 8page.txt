@@ -1,0 +1,595 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
+
+type Land = {
+  id: string;
+  title: string;
+  locality: string;
+  link: string;
+  lat: number;
+  lng: number;
+  score: number;
+  negotiatedPrice: number;
+  confirmed: boolean; // ✅ pin blocat
+};
+
+const Map = dynamic(() => import("./map"), { ssr: false });
+
+const STORAGE_KEY = "terenuri_v1";
+
+function uid() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function safeNumber(v: any, fallback: number) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export default function Home() {
+  // ====== DATA ======
+  const [lands, setLands] = useState<Land[]>([]);
+  const [selectedLandId, setSelectedLandId] = useState<string | null>(null);
+
+  // ====== FILTERS ======
+  const [query, setQuery] = useState("");
+  const [onlyConfirmed, setOnlyConfirmed] = useState(false);
+
+  // ====== MODAL EDIT ======
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Land | null>(null);
+
+  const selectedLand = useMemo(() => {
+    return lands.find((l) => l.id === selectedLandId) || null;
+  }, [lands, selectedLandId]);
+
+  const filteredLands = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    return lands.filter((l) => {
+      const matchesQuery =
+        !q ||
+        l.title.toLowerCase().includes(q) ||
+        l.locality.toLowerCase().includes(q);
+
+      const matchesConfirmed = !onlyConfirmed || l.confirmed === true;
+
+      return matchesQuery && matchesConfirmed;
+    });
+  }, [lands, query, onlyConfirmed]);
+
+  // 1) Load din localStorage (la start)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+
+        if (Array.isArray(parsed)) {
+          const normalized: Land[] = parsed.map((t: any) => ({
+            id: String(t.id ?? uid()),
+            title: String(t.title ?? "Teren nou"),
+            locality: String(t.locality ?? "Timișoara"),
+            link: String(t.link ?? ""),
+            lat: safeNumber(t.lat, 45.75797),
+            lng: safeNumber(t.lng, 21.22898),
+            score: safeNumber(t.score, 30),
+            negotiatedPrice: safeNumber(t.negotiatedPrice, 19000),
+            confirmed: Boolean(t.confirmed ?? false),
+          }));
+
+          setLands(normalized);
+          if (normalized.length > 0) setSelectedLandId(normalized[0].id);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // seed de început (dacă nu există nimic salvat)
+    const seed: Land[] = [
+      {
+        id: uid(),
+        title: "Teren nou",
+        locality: "Timișoara",
+        link: "https://exemplu.ro",
+        lat: 45.75797,
+        lng: 21.22898,
+        score: 30,
+        negotiatedPrice: 19000,
+        confirmed: false,
+      },
+      {
+        id: uid(),
+        title: "Teren nou",
+        locality: "Timișoara",
+        link: "https://exemplu.ro",
+        lat: 45.7597,
+        lng: 21.23,
+        score: 30,
+        negotiatedPrice: 19000,
+        confirmed: false,
+      },
+    ];
+
+    setLands(seed);
+    setSelectedLandId(seed[0].id);
+  }, []);
+
+  // 2) Save automat la orice modificare (o singură dată!)
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(lands));
+    } catch {
+      // ignore
+    }
+  }, [lands]);
+
+  // 3) Ascultăm mutarea pinului (din map.tsx)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent;
+      const detail = ce.detail as { id: string; lat: number; lng: number } | undefined;
+      if (!detail) return;
+
+      setLands((prev) =>
+        prev.map((t) => (t.id === detail.id ? { ...t, lat: detail.lat, lng: detail.lng } : t))
+      );
+    };
+
+    window.addEventListener("markerMoved", handler as EventListener);
+    return () => window.removeEventListener("markerMoved", handler as EventListener);
+  }, []);
+
+  // ====== ACTIONS ======
+  const onAdd = () => {
+    const item: Land = {
+      id: uid(),
+      title: "Teren nou",
+      locality: "Timișoara",
+      link: "https://exemplu.ro",
+      lat: 45.75797,
+      lng: 21.22898,
+      score: 30,
+      negotiatedPrice: 19000,
+      confirmed: false,
+    };
+
+    setLands((prev) => [item, ...prev]);
+    setSelectedLandId(item.id);
+  };
+
+  const onDelete = (id: string) => {
+    setLands((prev) => prev.filter((t) => t.id !== id));
+    setSelectedLandId((cur) => (cur === id ? null : cur));
+  };
+
+  const onConfirm = (id: string) => {
+    setLands((prev) => prev.map((t) => (t.id === id ? { ...t, confirmed: true } : t)));
+  };
+
+  const onUnconfirm = (id: string) => {
+    setLands((prev) => prev.map((t) => (t.id === id ? { ...t, confirmed: false } : t)));
+  };
+
+  const updateSelected = (patch: Partial<Land>) => {
+    if (!selectedLandId) return;
+    setLands((prev) => prev.map((t) => (t.id === selectedLandId ? { ...t, ...patch } : t)));
+  };
+
+  // ====== UI ======
+  return (
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+      {/* SIDEBAR */}
+      <div
+        style={{
+          width: 360,
+          background: "#111",
+          color: "#fff",
+          padding: 12,
+          overflowY: "auto",
+          borderRight: "1px solid #222",
+        }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 10 }}>Terenuri (V1)</div>
+
+        {/* FILTRE */}
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Caută: titlu / localitate..."
+            style={{ padding: 8, minWidth: 220, borderRadius: 10, border: "1px solid #333" }}
+          />
+
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, opacity: 0.9 }}>
+            <input
+              type="checkbox"
+              checked={onlyConfirmed}
+              onChange={(e) => setOnlyConfirmed(e.target.checked)}
+            />
+            Doar confirmate
+          </label>
+        </div>
+
+        <button
+          onClick={onAdd}
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #333",
+            background: "#0b0b0b",
+            color: "#fff",
+            cursor: "pointer",
+            marginBottom: 12,
+          }}
+        >
+          Adaugă teren
+        </button>
+
+        {filteredLands.map((l) => {
+          const isSelected = l.id === selectedLandId;
+
+          return (
+            <div
+              key={l.id}
+              onClick={() => setSelectedLandId(l.id)}
+              style={{
+                border: isSelected ? "1px solid #5aa9ff" : "1px solid #333",
+                borderRadius: 12,
+                padding: 12,
+                marginBottom: 10,
+                background: isSelected ? "#141a22" : "#0d0d0d",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontWeight: 800 }}>{l.title}</div>
+                <div style={{ opacity: 0.9 }}>Scor: {l.score}</div>
+              </div>
+
+              <div style={{ opacity: 0.9, marginTop: 6 }}>{l.locality}</div>
+              <div style={{ opacity: 0.9, marginTop: 6 }}>Preț negociat: {l.negotiatedPrice}</div>
+
+              <div style={{ marginTop: 6 }}>
+                Status:{" "}
+                {l.confirmed ? (
+                  <span style={{ color: "#1fbf5b" }}>✅ Confirmat</span>
+                ) : (
+                  <span style={{ color: "#ffcc00" }}>⏳ Neconfirmat</span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (l.link) window.open(l.link, "_blank", "noreferrer");
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#0b0b0b",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Deschide anunț
+                </button>
+
+                {l.confirmed ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnconfirm(l.id);
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "#0b0b0b",
+                      color: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Deblochează
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onConfirm(l.id);
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "#0b0b0b",
+                      color: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Confirmă locația
+                  </button>
+                )}
+
+                {/* BUTON EDIT (modal) */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditForm({ ...l });
+                    setIsEditing(true);
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#0b0b0b",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Edit
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(l.id);
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#0b0b0b",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Șterge
+                </button>
+              </div>
+
+              {!l.confirmed && (
+                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>
+                  Trage pinul pe hartă, apoi apasă „Confirmă locația”.
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* EDITARE DIRECTĂ (cum ai deja) */}
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #222" }}>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Editare teren selectat</div>
+
+          {!selectedLand ? (
+            <div style={{ opacity: 0.8 }}>Selectează un teren din listă.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Titlu</label>
+              <input
+                value={selectedLand.title}
+                onChange={(e) => updateSelected({ title: e.target.value })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Localitate</label>
+              <input
+                value={selectedLand.locality}
+                onChange={(e) => updateSelected({ locality: e.target.value })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Link</label>
+              <input
+                value={selectedLand.link}
+                onChange={(e) => updateSelected({ link: e.target.value })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Preț negociat</label>
+              <input
+                type="number"
+                value={selectedLand.negotiatedPrice}
+                onChange={(e) => updateSelected({ negotiatedPrice: safeNumber(e.target.value, 0) })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Scor</label>
+              <input
+                type="number"
+                value={selectedLand.score}
+                onChange={(e) => updateSelected({ score: safeNumber(e.target.value, 0) })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+                Coordonate: {selectedLand.lat.toFixed(6)}, {selectedLand.lng.toFixed(6)}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* HARTA */}
+      <div style={{ flex: 1 }}>
+        <Map
+          lands={lands}
+          selectedLandId={selectedLandId}
+          onSelectLand={(id: string) => setSelectedLandId(id)}
+        />
+      </div>
+
+      {/* MODAL EDIT */}
+      {isEditing && editForm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+        >
+          <div style={{ background: "white", padding: 16, minWidth: 360, borderRadius: 10 }}>
+            <h3 style={{ marginTop: 0 }}>Edit teren</h3>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <input
+                value={editForm.title}
+                onChange={(e) => setEditForm((prev) => (prev ? { ...prev, title: e.target.value } : prev))}
+                placeholder="Titlu"
+                style={{ padding: 8 }}
+              />
+
+              <input
+                value={editForm.locality}
+                onChange={(e) =>
+                  setEditForm((prev) => (prev ? { ...prev, locality: e.target.value } : prev))
+                }
+                placeholder="Localitate"
+                style={{ padding: 8 }}
+              />
+
+              <input
+                value={editForm.link}
+                onChange={(e) => setEditForm((prev) => (prev ? { ...prev, link: e.target.value } : prev))}
+                placeholder="Link"
+                style={{ padding: 8 }}
+              />
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={editForm.confirmed}
+                  onChange={(e) =>
+                    setEditForm((prev) => (prev ? { ...prev, confirmed: e.target.checked } : prev))
+                  }
+                />
+                Confirmed (pin blocat)
+              </label>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditForm(null);
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => {
+                  setLands((prev) => prev.map((l) => (l.id === editForm.id ? editForm : l)));
+                  setSelectedLandId(editForm.id);
+                  setIsEditing(false);
+                  setEditForm(null);
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+apoi decarcam:1) Instalează PostgreSQL (Windows)
+PAS 1.1 — descarcă installer-ul
+
+Deschide browser
+
+Caută: “PostgreSQL Windows download EDB”
+
+Intră pe pagina oficială EnterpriseDB (EDB) și descarcă ultima versiune (x64).
+
+PAS 1.2 — instalare (setări recomandate)
+
+În installer:
+
+bifează: PostgreSQL Server + pgAdmin 4
+
+port: 5432 (lasă default)
+
+Password pentru user postgres: pune una pe care o ții minte (ex: Postgres2026!)
+
+locale: lasă default
+
+✅ La final, ar trebui să ai:
+
+pgAdmin 4
+
+serviciul PostgreSQL pornit
+
+2) Creează baza de date terenuri_db
+Varianta simplă (pgAdmin)
+
+Deschide pgAdmin 4
+
+În stânga: Servers → PostgreSQL → Databases
+
+Click dreapta pe Databases → Create → Database
+
+Name:
+
+terenuri_db
+
+
+Save
+
+3) Setează conexiunea în .env
+
+În proiectul tău ai deja fișier .env (în root, lângă package.json).
+
+Deschide .env și pune (înlocuiește parola cu a ta):
+
+DATABASE_URL="postgresql://postgres:PAROLA_TA@localhost:5432/terenuri_db?schema=public"
+
+
+Exemplu dacă parola ta e Postgres2026!:
+
+DATABASE_URL="postgresql://postgres:Postgres2026!@localhost:5432/terenuri_db?schema=public"
+
+
+⚠️ Dacă parola are caractere speciale (ex: @, #, ?, /) spune-mi și îți dau varianta corectă “encoded”. ! e ok.
