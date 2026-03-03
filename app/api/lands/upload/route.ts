@@ -5,7 +5,6 @@ import { prisma } from "@/app/lib/prisma";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-const MAX_IMAGES_PER_LAND = 5;
 
 export async function POST(req: NextRequest) {
   try {

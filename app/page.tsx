@@ -21,6 +21,10 @@ type Land = {
 
 type LandWithDistance = Land & { distanceKm: number | null };
 type RawLand = Partial<Land> & Record<string, unknown>;
+type AreaBounds = {
+  ne: { lat: number; lng: number };
+  sw: { lat: number; lng: number };
+};
 
 const Map = dynamic(() => import("./map"), { ssr: false });
 const STORAGE_KEY = "terenuri_v2";
@@ -50,6 +54,15 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   return R * c;
 }
 
+function isInsideArea(lat: number, lng: number, area: AreaBounds) {
+  return (
+    lat <= area.ne.lat &&
+    lat >= area.sw.lat &&
+    lng <= area.ne.lng &&
+    lng >= area.sw.lng
+  );
+}
+
 // Convertim fișierul la base64 pentru stocare locală
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -76,12 +89,6 @@ function ImageGallery({
 
   // Când se schimbă imaginile, asigurăm că activeIdx e valid
   const safeIdx = Math.min(activeIdx, Math.max(0, images.length - 1));
-
-  useEffect(() => {
-    if (activeIdx >= images.length && images.length > 0) {
-      setActiveIdx(images.length - 1);
-    }
-  }, [images.length, activeIdx]);
 
   if (images.length === 0) return null;
 
@@ -291,6 +298,7 @@ export default function Home() {
   const [onlyConfirmed, setOnlyConfirmed] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Land | null>(null);
+  const [areaFilter, setAreaFilter] = useState<AreaBounds | null>(null);
   // stare galerie extinsă per card
   const [expandedGallery, setExpandedGallery] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -456,6 +464,23 @@ export default function Home() {
     return () => window.removeEventListener("markerMoved", handler as EventListener);
   }, []);
 
+  useEffect(() => {
+    const onZoneSelected = (e: Event) => {
+      const ce = e as CustomEvent;
+      const detail = ce.detail as AreaBounds | undefined;
+      if (!detail) return;
+      setAreaFilter(detail);
+    };
+    const onZoneCleared = () => setAreaFilter(null);
+
+    window.addEventListener("zoneSelected", onZoneSelected as EventListener);
+    window.addEventListener("zoneCleared", onZoneCleared as EventListener);
+    return () => {
+      window.removeEventListener("zoneSelected", onZoneSelected as EventListener);
+      window.removeEventListener("zoneCleared", onZoneCleared as EventListener);
+    };
+  }, []);
+
   // Auto-scroll la cardul selectat
   useEffect(() => {
     if (!effectiveSelectedLandId) return;
@@ -471,7 +496,8 @@ export default function Home() {
         const matchesQuery =
           !q || l.title.toLowerCase().includes(q) || l.locality.toLowerCase().includes(q);
         const matchesConfirmed = !onlyConfirmed || l.confirmed === true;
-        return matchesQuery && matchesConfirmed;
+        const matchesArea = !areaFilter || isInsideArea(l.lat, l.lng, areaFilter);
+        return matchesQuery && matchesConfirmed && matchesArea;
       })
       .map((l) => {
         const distanceKm = myLocation
@@ -485,7 +511,7 @@ export default function Home() {
         if (b.distanceKm == null) return -1;
         return a.distanceKm - b.distanceKm;
       });
-  }, [lands, query, onlyConfirmed, myLocation]);
+  }, [lands, query, onlyConfirmed, myLocation, areaFilter]);
 
   const onAdd = () => {
     const item: Land = {
@@ -601,6 +627,21 @@ export default function Home() {
             Confirmate
           </label>
         </div>
+        {areaFilter && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "#93c5fd",
+              marginBottom: 10,
+              border: "1px solid #1e3a8a",
+              borderRadius: 8,
+              padding: "6px 8px",
+              background: "#0b1220",
+            }}
+          >
+            Filtru activ: vezi doar terenuri din dreptunghiul desenat pe harta.
+          </div>
+        )}
 
         <button onClick={onAdd} style={{ ...btn, width: "100%", marginBottom: 12, background: "#1a1a1a", fontWeight: 700 }}>
           + Adaugă teren
@@ -726,7 +767,7 @@ export default function Home() {
 
               {!l.confirmed && (
                 <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8 }}>
-                  Trage pinul pe hartă, apoi apasă „Confirmă".
+                  Trage pinul pe hartă, apoi apasă &bdquo;Confirmă&rdquo;.
                 </div>
               )}
             </div>
@@ -828,7 +869,7 @@ export default function Home() {
       {/* HARTA */}
       <div style={{ flex: 1 }}>
         <Map
-          lands={lands}
+          lands={filteredLands}
           selectedLandId={effectiveSelectedLandId}
           onSelectLand={(id: string) => setSelectedLandId(id)}
         />
