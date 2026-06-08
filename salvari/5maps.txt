@@ -1,0 +1,96 @@
+"use client";
+
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import { MapContainer, Marker, TileLayer } from "react-leaflet";
+const normalIcon = L.divIcon({
+  className: "",
+  html: `<div style="
+    width:14px;height:14px;border-radius:999px;
+    background:#2b6cb0;border:2px solid white;
+    box-shadow:0 2px 6px rgba(0,0,0,.35);
+  "></div>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+const selectedIcon = L.divIcon({
+  className: "",
+  html: `<div style="
+    width:18px;height:18px;border-radius:999px;
+    background:#f59e0b;border:3px solid white;
+    box-shadow:0 3px 10px rgba(0,0,0,.45);
+  "></div>`,
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
+
+type LandOnMap = {
+  id: string;
+  title: string;
+  locality: string;
+  link: string;
+  lat: number;
+  lng: number;
+  score: number;
+  negotiatedPrice: number;
+  confirmed: boolean;
+};
+
+const icon = new L.Icon({
+  iconUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  shadowUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+
+export default function Map({
+  lands = [],
+  selectedLandId,
+  onSelectLand,
+}: {
+  lands: LandOnMap[];
+  selectedLandId?: string | null;
+  onSelectLand?: (id: string) => void;
+}) {
+
+  const center: [number, number] = [45.75797, 21.22898];
+
+  return (
+    <MapContainer
+      center={center}
+      zoom={10}
+      style={{ height: "100vh", width: "100%" }}
+    >
+      <TileLayer
+        attribution='&copy; OpenStreetMap contributors'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+
+      {lands.map((l) => (
+        <Marker
+          key={l.id}
+          position={[l.lat, l.lng]}
+          icon={icon}
+          draggable={!l.confirmed}
+          eventHandlers={{
+            dragend: (e) => {
+              const marker = e.target;
+              const pos = marker.getLatLng();
+
+              window.dispatchEvent(
+                new CustomEvent("markerMoved", {
+                  detail: { id: l.id, lat: pos.lat, lng: pos.lng },
+                })
+              );
+            },
+          }}
+        />
+      ))}
+    </MapContainer>
+  );
+}

@@ -1,0 +1,397 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
+
+type Land = {
+  id: string;
+  title: string;
+  locality: string;
+  link: string;
+  lat: number;
+  lng: number;
+  score: number;
+  negotiatedPrice: number;
+  confirmed: boolean; // ✅ pin blocat
+};
+
+const Map = dynamic(() => import("./map"), { ssr: false });
+
+const STORAGE_KEY = "terenuri_v1";
+
+function uid() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function safeNumber(v: any, fallback: number) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export default function Home() {
+  const [lands, setLands] = useState<Land[]>([]);
+  const [selectedLandId, setSelectedLandId] = useState<string | null>(null);
+
+  const selectedLand = useMemo(() => {
+    return lands.find((l) => l.id === selectedLandId) || null;
+  }, [lands, selectedLandId]);
+
+  // 1) Load din localStorage (la start)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+
+        if (Array.isArray(parsed)) {
+          const normalized: Land[] = parsed.map((t: any) => ({
+            id: String(t.id ?? uid()),
+            title: String(t.title ?? "Teren nou"),
+            locality: String(t.locality ?? "Timișoara"),
+            link: String(t.link ?? ""),
+            lat: safeNumber(t.lat, 45.75797),
+            lng: safeNumber(t.lng, 21.22898),
+            score: safeNumber(t.score, 30),
+            negotiatedPrice: safeNumber(t.negotiatedPrice, 19000),
+            confirmed: Boolean(t.confirmed ?? false),
+          }));
+
+          setLands(normalized);
+          if (normalized.length > 0) setSelectedLandId(normalized[0].id);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // seed de început (dacă nu există nimic salvat)
+    const seed: Land[] = [
+      {
+        id: uid(),
+        title: "Teren nou",
+        locality: "Timișoara",
+        link: "https://exemplu.ro",
+        lat: 45.75797,
+        lng: 21.22898,
+        score: 30,
+        negotiatedPrice: 19000,
+        confirmed: false,
+      },
+      {
+        id: uid(),
+        title: "Teren nou",
+        locality: "Timișoara",
+        link: "https://exemplu.ro",
+        lat: 45.7597,
+        lng: 21.23,
+        score: 30,
+        negotiatedPrice: 19000,
+        confirmed: false,
+      },
+    ];
+
+    setLands(seed);
+    setSelectedLandId(seed[0].id);
+  }, []);
+
+  // 2) Save automat la orice modificare
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(lands));
+    } catch {
+      // ignore
+    }
+  }, [lands]);
+
+  // 3) Ascultăm mutarea pinului (din map.tsx)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent;
+      const detail = ce.detail as { id: string; lat: number; lng: number } | undefined;
+      if (!detail) return;
+
+      setLands((prev) =>
+        prev.map((t) => (t.id === detail.id ? { ...t, lat: detail.lat, lng: detail.lng } : t))
+      );
+    };
+
+    window.addEventListener("markerMoved", handler as EventListener);
+    return () => window.removeEventListener("markerMoved", handler as EventListener);
+  }, []);
+
+  const onAdd = () => {
+    const item: Land = {
+      id: uid(),
+      title: "Teren nou",
+      locality: "Timișoara",
+      link: "https://exemplu.ro",
+      lat: 45.75797,
+      lng: 21.22898,
+      score: 30,
+      negotiatedPrice: 19000,
+      confirmed: false,
+    };
+
+    setLands((prev) => [item, ...prev]);
+    setSelectedLandId(item.id);
+  };
+
+  const onDelete = (id: string) => {
+    setLands((prev) => prev.filter((t) => t.id !== id));
+    setSelectedLandId((cur) => (cur === id ? null : cur));
+  };
+
+  const onConfirm = (id: string) => {
+    setLands((prev) => prev.map((t) => (t.id === id ? { ...t, confirmed: true } : t)));
+  };
+
+  const onUnconfirm = (id: string) => {
+    setLands((prev) => prev.map((t) => (t.id === id ? { ...t, confirmed: false } : t)));
+  };
+
+  const updateSelected = (patch: Partial<Land>) => {
+    if (!selectedLandId) return;
+    setLands((prev) => prev.map((t) => (t.id === selectedLandId ? { ...t, ...patch } : t)));
+  };
+
+  return (
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+      {/* SIDEBAR */}
+      <div
+        style={{
+          width: 360,
+          background: "#111",
+          color: "#fff",
+          padding: 12,
+          overflowY: "auto",
+          borderRight: "1px solid #222",
+        }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 10 }}>Terenuri (V1)</div>
+
+        <button
+          onClick={onAdd}
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #333",
+            background: "#0b0b0b",
+            color: "#fff",
+            cursor: "pointer",
+            marginBottom: 12,
+          }}
+        >
+          Adaugă teren
+        </button>
+
+        {lands.map((l) => {
+          const isSelected = l.id === selectedLandId;
+
+          return (
+            <div
+              key={l.id}
+              onClick={() => setSelectedLandId(l.id)}
+              style={{
+                border: isSelected ? "1px solid #5aa9ff" : "1px solid #333",
+                borderRadius: 12,
+                padding: 12,
+                marginBottom: 10,
+                background: isSelected ? "#141a22" : "#0d0d0d",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontWeight: 800 }}>{l.title}</div>
+                <div style={{ opacity: 0.9 }}>Scor: {l.score}</div>
+              </div>
+
+              <div style={{ opacity: 0.9, marginTop: 6 }}>{l.locality}</div>
+              <div style={{ opacity: 0.9, marginTop: 6 }}>Preț negociat: {l.negotiatedPrice}</div>
+
+              <div style={{ marginTop: 6 }}>
+                Status:{" "}
+                {l.confirmed ? (
+                  <span style={{ color: "#1fbf5b" }}>✅ Confirmat</span>
+                ) : (
+                  <span style={{ color: "#ffcc00" }}>⏳ Neconfirmat</span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (l.link) window.open(l.link, "_blank", "noreferrer");
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#0b0b0b",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Deschide anunț
+                </button>
+
+                {l.confirmed ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnconfirm(l.id);
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "#0b0b0b",
+                      color: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Deblochează
+                  </button>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onConfirm(l.id);
+                    }}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "#0b0b0b",
+                      color: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Confirmă locația
+                  </button>
+                )}
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(l.id);
+                  }}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#0b0b0b",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  Șterge
+                </button>
+              </div>
+
+              {!l.confirmed && (
+                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>
+                  Trage pinul pe hartă, apoi apasă „Confirmă locația”.
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* FORM EDITARE (Pas 5) */}
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #222" }}>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Editare teren selectat</div>
+
+          {!selectedLand ? (
+            <div style={{ opacity: 0.8 }}>Selectează un teren din listă.</div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Titlu</label>
+              <input
+                value={selectedLand.title}
+                onChange={(e) => updateSelected({ title: e.target.value })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Localitate</label>
+              <input
+                value={selectedLand.locality}
+                onChange={(e) => updateSelected({ locality: e.target.value })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Link</label>
+              <input
+                value={selectedLand.link}
+                onChange={(e) => updateSelected({ link: e.target.value })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Preț negociat</label>
+              <input
+                type="number"
+                value={selectedLand.negotiatedPrice}
+                onChange={(e) => updateSelected({ negotiatedPrice: safeNumber(e.target.value, 0) })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <label style={{ fontSize: 12, opacity: 0.8 }}>Scor</label>
+              <input
+                type="number"
+                value={selectedLand.score}
+                onChange={(e) => updateSelected({ score: safeNumber(e.target.value, 0) })}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #333",
+                  background: "#0b0b0b",
+                  color: "#fff",
+                }}
+              />
+
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 6 }}>
+                Coordonate: {selectedLand.lat.toFixed(6)}, {selectedLand.lng.toFixed(6)}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* HARTA */}
+      <div style={{ flex: 1 }}>
+        <Map
+  lands={lands}
+  selectedLandId={selectedLandId}
+  onSelectLand={(id: string) => setSelectedLandId(id)}
+/>
+
+      </div>
+    </div>
+  );
+}
