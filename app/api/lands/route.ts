@@ -1,29 +1,40 @@
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 
-// GET → listare terenuri
 export async function GET() {
-  const lands = await prisma.land.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+  try {
+    const lands = await prisma.land.findMany({
+      orderBy: { createdAt: "desc" },
+    });
 
-  return NextResponse.json(lands);
+    return NextResponse.json(lands);
+  } catch (error) {
+    console.error("GET /api/lands error:", error);
+    return NextResponse.json({ error: "Eroare la citirea terenurilor" }, { status: 500 });
+  }
 }
 
-// POST → adaugă teren nou
-export async function POST() {
-  const land = await prisma.land.create({
-    data: {
-      title: "Teren test",
-      locality: "Timișoara",
-      link: "https://exemplu.ro",
-      lat: 45.7489,
-      lng: 21.2087,
-      score: 5,
-      negotiatedPrice: 120000,
-      confirmed: false,
-    },
-  });
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
 
-  return NextResponse.json(land);
+    const land = await prisma.land.create({
+      data: {
+        title: body.title || "",
+        locality: body.locality || "",
+        link: body.link || "",
+        lat: Number(body.lat),
+        lng: Number(body.lng),
+        score: Number(body.score || 0),
+        negotiatedPrice: body.negotiatedPrice ? Number(body.negotiatedPrice) : null,
+        confirmed: Boolean(body.confirmed || false),
+        imagePath: body.imagePath || null,
+      },
+    });
+
+    return NextResponse.json(land);
+  } catch (error) {
+    console.error("POST /api/lands error:", error);
+    return NextResponse.json({ error: "Eroare la salvarea terenului" }, { status: 500 });
+  }
 }
