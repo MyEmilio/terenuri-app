@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ZonePriceHint from "./components/zone-price-hint";
 
 // ====== HOOK RESIZE SIDEBAR ======
 function useResizableSidebar(defaultWidth = 400, min = 280, max = 750) {
@@ -56,6 +57,7 @@ const ALL_TYPES = Object.entries(PROPERTY_TYPES) as [PropertyType, (typeof PROPE
 // ====== TIPURI DATE ======
 type Land = {
   id: string;
+  dbId?: string;
   propertyType: PropertyType;
   title: string;
   locality: string;
@@ -71,6 +73,7 @@ type Land = {
   rooms?: number;
   floor?: number;
   confirmed: boolean;
+  aiScore?: number;
 };
 
 type ExternalListing = {
@@ -662,6 +665,8 @@ export default function Home() {
   const { width: sidebarWidth, onMouseDown: startResize } = useResizableSidebar(400);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [lands, setLands] = useState<Land[]>([]);
+  const landsRef = useRef<Land[]>([]);
+  useEffect(() => { landsRef.current = lands; }, [lands]);
   const [selectedLandId, setSelectedLandId] = useState<string | null>(null);
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [query, setQuery] = useState("");
@@ -671,6 +676,8 @@ export default function Home() {
   const [areaFilter, setAreaFilter] = useState<AreaBounds | null>(null);
   const [expandedGallery, setExpandedGallery] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [batchScoring, setBatchScoring] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Module A - filtrare tip
   const [typeFilter, setTypeFilter] = useState<PropertyType | "all">("all");
@@ -743,7 +750,16 @@ export default function Home() {
         const land = prev.find((l) => l.id === landId);
         if (!land) return prev;
         if ((land.images ?? []).length >= MAX_IMAGES) { alert("Ai atins limita de 5 poze."); return prev; }
-        return prev.map((l) => l.id === landId ? { ...l, images: [...(l.images ?? []), finalPath] } : l);
+        const updated = prev.map((l) => l.id === landId ? { ...l, images: [...(l.images ?? []), finalPath] } : l);
+        const updatedLand = updated.find((l) => l.id === landId);
+        if (updatedLand?.dbId) {
+          fetch(`/api/lands/${updatedLand.dbId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ images: updatedLand.images }),
+          }).catch(() => {});
+        }
+        return updated;
       });
     } catch (err) {
       console.error(err);
@@ -754,19 +770,41 @@ export default function Home() {
   }, []);
 
   const deleteImage = useCallback((landId: string, imgIdx: number) => {
-    setLands((prev) => prev.map((l) => {
-      if (l.id !== landId) return l;
-      const newImages = l.images.filter((_, i) => i !== imgIdx);
-      let newThumb = l.thumbnailIdx;
-      if (imgIdx === l.thumbnailIdx) newThumb = 0;
-      else if (imgIdx < l.thumbnailIdx) newThumb = l.thumbnailIdx - 1;
-      newThumb = Math.min(newThumb, Math.max(0, newImages.length - 1));
-      return { ...l, images: newImages, thumbnailIdx: newThumb };
-    }));
+    setLands((prev) => {
+      const updated = prev.map((l) => {
+        if (l.id !== landId) return l;
+        const newImages = l.images.filter((_, i) => i !== imgIdx);
+        let newThumb = l.thumbnailIdx;
+        if (imgIdx === l.thumbnailIdx) newThumb = 0;
+        else if (imgIdx < l.thumbnailIdx) newThumb = l.thumbnailIdx - 1;
+        newThumb = Math.min(newThumb, Math.max(0, newImages.length - 1));
+        return { ...l, images: newImages, thumbnailIdx: newThumb };
+      });
+      const land = updated.find((l) => l.id === landId);
+      if (land?.dbId) {
+        fetch(`/api/lands/${land.dbId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ images: land.images, thumbnailIdx: land.thumbnailIdx }),
+        }).catch(() => {});
+      }
+      return updated;
+    });
   }, []);
 
   const setThumbnail = useCallback((landId: string, idx: number) => {
-    setLands((prev) => prev.map((l) => (l.id === landId ? { ...l, thumbnailIdx: idx } : l)));
+    setLands((prev) => {
+      const updated = prev.map((l) => (l.id === landId ? { ...l, thumbnailIdx: idx } : l));
+      const land = updated.find((l) => l.id === landId);
+      if (land?.dbId) {
+        fetch(`/api/lands/${land.dbId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ thumbnailIdx: idx }),
+        }).catch(() => {});
+      }
+      return updated;
+    });
   }, []);
 
   // ====== LOAD din localStorage ======
@@ -780,6 +818,7 @@ export default function Home() {
         if (Array.isArray(parsed)) {
           const normalized: Land[] = parsed.map((t: RawLand) => ({
             id: String(t.id ?? uid()),
+            dbId: t.dbId ? String(t.dbId) : undefined,
             propertyType: normalizeType(t.propertyType),
             title: String(t.title ?? "Proprietate nouă"),
             locality: String(t.locality ?? "Timișoara"),
@@ -796,6 +835,7 @@ export default function Home() {
             rooms: t.rooms == null ? undefined : safeNumber(t.rooms, 0),
             floor: t.floor == null ? undefined : safeNumber(t.floor, 0),
             confirmed: Boolean(t.confirmed ?? false),
+            aiScore: t.aiScore != null ? safeNumber(t.aiScore, 0) : undefined,
           }));
           setLands(normalized);
           return;
@@ -803,6 +843,50 @@ export default function Home() {
       }
     } catch { /* ignore */ }
     setLands([]);
+  }, []);
+
+  // ====== LOAD din API (suplimentar localStorage) ======
+  useEffect(() => {
+    type DbLand = {
+      id: string; title: string; locality: string; link: string | null;
+      lat: number; lng: number; score: number; negotiatedPrice: number | null;
+      confirmed: boolean; imagePath: string | null;
+      propertyType: string; marketPrice: number | null; areaM2: number | null;
+      rooms: number | null; floor: number | null; images: string[]; thumbnailIdx: number;
+      aiScore: number | null;
+    };
+    fetch("/api/lands")
+      .then((r) => r.json())
+      .then((dbLands: DbLand[]) => {
+        setLands((prev) => {
+          const localDbIds = new Set(prev.map((l) => l.dbId).filter(Boolean));
+          const toAdd: Land[] = dbLands
+            .filter((dl) => !localDbIds.has(dl.id))
+            .map((dl) => ({
+              id: uid(),
+              dbId: dl.id,
+              propertyType: normalizeType(dl.propertyType),
+              title: dl.title,
+              locality: dl.locality,
+              link: dl.link || "",
+              lat: dl.lat,
+              lng: dl.lng,
+              score: dl.score,
+              negotiatedPrice: dl.negotiatedPrice ?? 0,
+              images: dl.images?.length ? dl.images : dl.imagePath ? [dl.imagePath] : [],
+              thumbnailIdx: dl.thumbnailIdx ?? 0,
+              confirmed: dl.confirmed,
+              marketPrice: dl.marketPrice ?? undefined,
+              areaM2: dl.areaM2 ?? undefined,
+              rooms: dl.rooms ?? undefined,
+              floor: dl.floor ?? undefined,
+              aiScore: dl.aiScore ?? undefined,
+            }));
+          if (toAdd.length === 0) return prev;
+          return [...toAdd, ...prev];
+        });
+      })
+      .catch(() => {});
   }, []);
 
   // Geolocation
@@ -827,6 +911,14 @@ export default function Home() {
       const detail = (e as CustomEvent).detail as { id: string; lat: number; lng: number } | undefined;
       if (!detail) return;
       setLands((prev) => prev.map((t) => t.id === detail.id ? { ...t, lat: detail.lat, lng: detail.lng } : t));
+      const dbId = landsRef.current.find((l) => l.id === detail.id)?.dbId;
+      if (dbId) {
+        fetch(`/api/lands/${dbId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat: detail.lat, lng: detail.lng }),
+        }).catch(() => {});
+      }
     };
     window.addEventListener("markerMoved", handler as EventListener);
     return () => window.removeEventListener("markerMoved", handler as EventListener);
@@ -986,11 +1078,12 @@ export default function Home() {
       filterPriceMin, filterPriceMax, filterAreaMin, filterAreaMax, filterRoomsMin, sortBy]);
 
   // ====== ACȚIUNI ======
-  const onAdd = () => {
+  const onAdd = async () => {
     const pt = typeFilter !== "all" ? typeFilter : "teren-intravilan";
     const cfg = PROPERTY_TYPES[pt];
+    const localId = uid();
     const item: Land = {
-      id: uid(),
+      id: localId,
       propertyType: pt,
       title: `${cfg.icon} ${cfg.label} nou`,
       locality: "Timișoara",
@@ -1004,30 +1097,73 @@ export default function Home() {
       confirmed: false,
     };
     setLands((prev) => [item, ...prev]);
-    setSelectedLandId(item.id);
+    setSelectedLandId(localId);
+
+    try {
+      const res = await fetch("/api/lands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: item.title, locality: item.locality, link: item.link,
+          lat: item.lat, lng: item.lng, score: item.score,
+          negotiatedPrice: item.negotiatedPrice || null, confirmed: item.confirmed,
+          propertyType: item.propertyType, images: item.images,
+          thumbnailIdx: item.thumbnailIdx,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLands((prev) => prev.map((l) => l.id === localId ? { ...l, dbId: data.id as string } : l));
+      }
+    } catch { /* non-fatal: datele sunt salvate în localStorage */ }
   };
 
   const onDelete = (id: string) => {
+    const land = lands.find((l) => l.id === id);
     setLands((prev) => prev.filter((t) => t.id !== id));
     setSelectedLandId((cur) => (cur === id ? null : cur));
     setExpandedGallery((cur) => (cur === id ? null : cur));
+    if (land?.dbId) {
+      fetch(`/api/lands/${land.dbId}`, { method: "DELETE" }).catch(() => {});
+    }
   };
 
-  const onConfirm = (id: string) =>
+  const onConfirm = (id: string) => {
+    const dbId = lands.find((l) => l.id === id)?.dbId;
     setLands((prev) => prev.map((t) => (t.id === id ? { ...t, confirmed: true } : t)));
-  const onUnconfirm = (id: string) =>
+    if (dbId) {
+      fetch(`/api/lands/${dbId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmed: true }),
+      }).catch(() => {});
+    }
+  };
+  const onUnconfirm = (id: string) => {
+    const dbId = lands.find((l) => l.id === id)?.dbId;
     setLands((prev) => prev.map((t) => (t.id === id ? { ...t, confirmed: false } : t)));
+    if (dbId) {
+      fetch(`/api/lands/${dbId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmed: false }),
+      }).catch(() => {});
+    }
+  };
 
   const updateSelected = (patch: Partial<Land>) => {
     if (!effectiveSelectedLandId) return;
     setLands((prev) => prev.map((t) => (t.id === effectiveSelectedLandId ? { ...t, ...patch } : t)));
   };
 
-  const handleModalSave = () => {
+  const handleModalSave = async () => {
     if (!editForm) return;
+    const dbId = lands.find((l) => l.id === editForm.id)?.dbId || editForm.dbId;
+    const localId = editForm.id;
+
     setLands((prev) =>
       prev.map((l) =>
-        l.id === editForm.id
+        l.id === localId
           ? {
               ...l,
               propertyType: editForm.propertyType,
@@ -1045,9 +1181,67 @@ export default function Home() {
           : l
       )
     );
-    setSelectedLandId(editForm.id);
+    setSelectedLandId(localId);
     setIsEditing(false);
     setEditForm(null);
+
+    const apiPayload = {
+      title: editForm.title,
+      locality: editForm.locality,
+      link: editForm.link,
+      lat: editForm.lat,
+      lng: editForm.lng,
+      score: editForm.score,
+      negotiatedPrice: editForm.negotiatedPrice || null,
+      confirmed: editForm.confirmed,
+      propertyType: editForm.propertyType,
+      marketPrice: editForm.marketPrice ?? null,
+      areaM2: editForm.areaM2 ?? null,
+      rooms: editForm.rooms ?? null,
+      floor: editForm.floor ?? null,
+      images: editForm.images,
+      thumbnailIdx: editForm.thumbnailIdx,
+    };
+
+    try {
+      if (dbId) {
+        await fetch(`/api/lands/${dbId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(apiPayload),
+        });
+      } else {
+        const res = await fetch("/api/lands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(apiPayload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLands((prev) => prev.map((l) => l.id === localId ? { ...l, dbId: data.id as string } : l));
+        }
+      }
+    } catch { /* non-fatal */ }
+  };
+
+  // ====== BATCH AI SCORING ======
+  const scoreAllLands = async () => {
+    const targets = lands.filter((l) => l.dbId && l.aiScore == null);
+    if (targets.length === 0) { alert("Toate proprietățile sincronizate au deja scor AI calculat."); return; }
+    setBatchScoring(true);
+    setBatchProgress({ done: 0, total: targets.length });
+    for (const land of targets) {
+      try {
+        const res = await fetch(`/api/lands/${land.dbId}/score`, { method: "POST" });
+        if (res.ok) {
+          const data = await res.json() as { total: number };
+          setLands((prev) => prev.map((l) => l.dbId === land.dbId ? { ...l, aiScore: data.total } : l));
+        }
+      } catch { /* continuăm */ }
+      setBatchProgress((p) => p ? { ...p, done: p.done + 1 } : null);
+    }
+    setBatchScoring(false);
+    setBatchProgress(null);
   };
 
   // ====== STILURI ======
@@ -1230,9 +1424,19 @@ export default function Home() {
           </div>
         )}
 
-        <button onClick={onAdd} style={{ ...btn, width: "100%", marginBottom: 10, background: "#1a1a1a", fontWeight: 700 }}>
+        <button onClick={onAdd} style={{ ...btn, width: "100%", marginBottom: 6, background: "#1a1a1a", fontWeight: 700 }}>
           + Adaugă {typeFilter !== "all" ? PROPERTY_TYPES[typeFilter].label : "proprietate"}
         </button>
+
+        {/* Batch AI Score */}
+        {lands.some((l) => l.dbId && l.aiScore == null) && (
+          <button onClick={scoreAllLands} disabled={batchScoring}
+            style={{ ...btn, width: "100%", marginBottom: 10, borderColor: "#7c3aed", color: batchScoring ? "#a78bfa" : "#c4b5fd", background: batchScoring ? "#1e1030" : "#0b0b0b", fontSize: 12 }}>
+            {batchScoring && batchProgress
+              ? `🤖 ${batchProgress.done}/${batchProgress.total} proprietăți scored...`
+              : `🤖 Calculează scor AI (${lands.filter((l) => l.dbId && l.aiScore == null).length})`}
+          </button>
+        )}
 
         {/* Zona activă — buton salvare */}
         {areaFilter && (
@@ -1354,7 +1558,14 @@ export default function Home() {
                     {cfg.icon} {cfg.label}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>⭐ {l.score}</div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                  <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: "nowrap" }}>⭐ {l.score}</div>
+                  {l.aiScore != null && (
+                    <div style={{ fontSize: 10, whiteSpace: "nowrap", color: l.aiScore >= 65 ? "#4ade80" : l.aiScore >= 35 ? "#f59e0b" : "#f87171", fontWeight: 700 }}>
+                      🤖 {l.aiScore}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div style={{ fontWeight: 800, fontSize: 14, marginTop: 5 }}>{l.title}</div>
@@ -1406,6 +1617,12 @@ export default function Home() {
                   <button onClick={(e) => { e.stopPropagation(); window.open(l.link, "_blank", "noreferrer"); }} style={btn}>
                     🔗 Anunț
                   </button>
+                )}
+                {l.dbId && (
+                  <a href={`/terenuri/${l.dbId}`} onClick={(e) => e.stopPropagation()}
+                    style={{ ...btn, textDecoration: "none", color: "#60a5fa", borderColor: "#1e3a8a", display: "inline-flex", alignItems: "center" }}>
+                    📄 Detalii
+                  </a>
                 )}
                 {l.confirmed ? (
                   <button onClick={(e) => { e.stopPropagation(); onUnconfirm(l.id); }} style={btn}>🔓 Deblochează</button>
@@ -1575,6 +1792,12 @@ export default function Home() {
               <input type="number" value={editForm.negotiatedPrice}
                 onChange={(e) => setEditForm((p) => p ? { ...p, negotiatedPrice: safeNumber(e.target.value, 0) } : p)}
                 placeholder="Preț negociat (€)" style={inputDark} />
+              <ZonePriceHint
+                locality={editForm.locality}
+                propertyType={editForm.propertyType}
+                areaM2={editForm.areaM2}
+                onUseSuggested={(price) => setEditForm((p) => p ? { ...p, negotiatedPrice: price } : p)}
+              />
               <input type="number" value={editForm.marketPrice ?? ""}
                 onChange={(e) => setEditForm((p) => p ? { ...p, marketPrice: e.target.value ? safeNumber(e.target.value, 0) : undefined } : p)}
                 placeholder="Preț piață (€) — opțional" style={inputDark} />

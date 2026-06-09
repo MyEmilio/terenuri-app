@@ -18,5 +18,40 @@ model Land {
   negotiatedPrice Float?
   confirmed       Boolean  @default(false)
   createdAt       DateTime @default(now())
-  imagePath String?
+  imagePath       String?  // deprecated — use images[]
+
+  propertyType    String   @default("teren-intravilan")
+  marketPrice     Float?
+  areaM2          Float?
+  rooms           Int?
+  floor           Int?
+  images          String[] @default([])
+  thumbnailIdx    Int      @default(0)
+
+  aiScore         Int?
+  aiScoreData     Json?
+
+  priceHistory    PriceHistory[]
+}
+
+model PriceHistory {
+  id         String   @id @default(cuid())
+  landId     String
+  price      Float
+  source     String   @default("manual")
+  recordedAt DateTime @default(now())
+  land       Land     @relation(fields: [landId], references: [id], onDelete: Cascade)
+}
+
+model Alert {
+  id             String    @id @default(cuid())
+  locality       String
+  propertyType   String    @default("teren-intravilan")
+  maxTotalPrice  Float?
+  maxPriceM2     Float?
+  email          String
+  active         Boolean   @default(true)
+  notifiedLinks  String[]  @default([])
+  createdAt      DateTime  @default(now())
+  lastCheckedAt  DateTime?
 }

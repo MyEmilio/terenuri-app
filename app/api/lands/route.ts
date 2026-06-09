@@ -29,6 +29,13 @@ export async function POST(request: Request) {
         negotiatedPrice: body.negotiatedPrice ? Number(body.negotiatedPrice) : null,
         confirmed: Boolean(body.confirmed || false),
         imagePath: body.imagePath || null,
+        propertyType: body.propertyType || "teren-intravilan",
+        marketPrice: body.marketPrice ? Number(body.marketPrice) : null,
+        areaM2: body.areaM2 ? Number(body.areaM2) : null,
+        rooms: body.rooms ? Number(body.rooms) : null,
+        floor: body.floor != null && body.floor !== "" ? Number(body.floor) : null,
+        images: Array.isArray(body.images) ? body.images : [],
+        thumbnailIdx: Number(body.thumbnailIdx || 0),
       },
     });
 
