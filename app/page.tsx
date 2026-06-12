@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ZonePriceHint from "./components/zone-price-hint";
+import type { MarketPin } from "./map";
 
 // ====== HOOK RESIZE SIDEBAR ======
 function useResizableSidebar(defaultWidth = 400, min = 280, max = 750) {
@@ -679,6 +680,15 @@ export default function Home() {
   const [batchScoring, setBatchScoring] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
 
+  // Market listings (anunțuri din piață — layer separat pe hartă)
+  const [marketListings, setMarketListings] = useState<MarketPin[]>([]);
+  const [marketScanLocality, setMarketScanLocality] = useState("");
+  const [marketScanType, setMarketScanType] = useState("teren-intravilan");
+  const [marketScanning, setMarketScanning] = useState(false);
+  const [marketStats, setMarketStats] = useState<{
+    total: number; avgPrice: number | null; minPrice: number | null; maxPrice: number | null; avgPriceM2: number | null;
+  } | null>(null);
+
   // Module A - filtrare tip
   const [typeFilter, setTypeFilter] = useState<PropertyType | "all">("all");
 
@@ -1244,6 +1254,25 @@ export default function Home() {
     setBatchProgress(null);
   };
 
+  const scanMarket = async () => {
+    if (!marketScanLocality.trim()) return;
+    setMarketScanning(true);
+    try {
+      const res = await fetch("/api/market-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locality: marketScanLocality.trim(), propertyType: marketScanType }),
+      });
+      const data = await res.json() as { total: number; avgPrice: number | null; minPrice: number | null; maxPrice: number | null; avgPriceM2: number | null };
+      setMarketStats({ total: data.total, avgPrice: data.avgPrice, minPrice: data.minPrice, maxPrice: data.maxPrice, avgPriceM2: data.avgPriceM2 });
+      // Reîncarcă pinii de market
+      const lr = await fetch(`/api/market-listings?locality=${encodeURIComponent(marketScanLocality.trim())}&propertyType=${marketScanType}`);
+      const listings = await lr.json() as MarketPin[];
+      setMarketListings(listings);
+    } catch { /* ignore */ }
+    finally { setMarketScanning(false); }
+  };
+
   // ====== STILURI ======
   const inputDark = {
     padding: 10, borderRadius: 10, border: "1px solid #333", background: "#0b0b0b", color: "#fff",
@@ -1437,6 +1466,51 @@ export default function Home() {
               : `🤖 Calculează scor AI (${lands.filter((l) => l.dbId && l.aiScore == null).length})`}
           </button>
         )}
+
+        {/* ===== SCANARE PIAȚĂ ===== */}
+        <div style={{ background: "#0b1020", border: "1px solid #1e3a5f", borderRadius: 10, padding: "12px 12px", marginBottom: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: 12, color: "#60a5fa", marginBottom: 8 }}>📊 Scanează piața</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+            <input
+              value={marketScanLocality}
+              onChange={(e) => setMarketScanLocality(e.target.value)}
+              placeholder="Localitate (ex: Timișoara)"
+              style={{ flex: 1, padding: "7px 10px", borderRadius: 7, border: "1px solid #1e3a5f", background: "#0a0a0a", color: "#fff", fontSize: 12 }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <select value={marketScanType} onChange={(e) => setMarketScanType(e.target.value)}
+              style={{ flex: 1, padding: "7px 8px", borderRadius: 7, border: "1px solid #1e3a5f", background: "#0a0a0a", color: "#fff", fontSize: 11 }}>
+              {Object.entries(PROPERTY_TYPES).map(([k, v]) => (
+                <option key={k} value={k}>{v.icon} {v.label}</option>
+              ))}
+            </select>
+            <button onClick={scanMarket} disabled={marketScanning || !marketScanLocality.trim()}
+              style={{ ...btn, padding: "7px 12px", fontSize: 11, borderColor: "#1d4ed8", color: "#93c5fd", background: marketScanning ? "#0b1a30" : "#0b0b0b", opacity: !marketScanLocality.trim() ? 0.5 : 1 }}>
+              {marketScanning ? "⏳" : "🔍 Scan"}
+            </button>
+          </div>
+          {marketStats && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
+              {[
+                { label: "Anunțuri", value: String(marketStats.total) },
+                { label: "Preț mediu/m²", value: marketStats.avgPriceM2 ? `${marketStats.avgPriceM2.toLocaleString("ro-RO")} €` : "—" },
+                { label: "Min preț", value: marketStats.minPrice ? `${marketStats.minPrice.toLocaleString("ro-RO")} €` : "—" },
+                { label: "Max preț", value: marketStats.maxPrice ? `${marketStats.maxPrice.toLocaleString("ro-RO")} €` : "—" },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ background: "#080d14", borderRadius: 6, padding: "5px 8px" }}>
+                  <div style={{ fontSize: 9, color: "#475569" }}>{label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {marketListings.length > 0 && (
+            <div style={{ fontSize: 10, color: "#3b82f6", marginTop: 6 }}>
+              📍 {marketListings.length} pini albaștri pe hartă — click pe pin pentru detalii
+            </div>
+          )}
+        </div>
 
         {/* Zona activă — buton salvare */}
         {areaFilter && (
@@ -1750,6 +1824,7 @@ export default function Home() {
       <div style={{ flex: 1, minWidth: 0 }}>
         <Map
           lands={filteredLands}
+          marketListings={marketListings}
           selectedLandId={effectiveSelectedLandId}
           onSelectLand={(id: string) => setSelectedLandId(id)}
           countryCenter={countryFlyTarget?.center}

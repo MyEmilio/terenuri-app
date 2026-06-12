@@ -6,7 +6,7 @@ import "leaflet-draw/dist/leaflet.draw.css";
 import L from "leaflet";
 import { useEffect, useState } from "react";
 import { EditControl } from "react-leaflet-draw";
-import { FeatureGroup, MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
+import { FeatureGroup, MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { PROPERTY_TYPES, type PropertyType } from "./page";
 
 // Iconuri colorate per tip proprietate
@@ -42,6 +42,31 @@ function getIcon(propertyType: PropertyType | undefined, isSelected: boolean): L
   if (!iconCache[color]) iconCache[color] = makeIcon(color, 14);
   return iconCache[color];
 }
+
+export type MarketPin = {
+  id: string;
+  source: string;
+  title: string;
+  price: number | null;
+  locality: string;
+  lat: number;
+  lng: number;
+  link: string | null;
+  areaM2: number | null;
+  propertyType: string;
+  imageUrl: string | null;
+};
+
+const marketIcon = L.divIcon({
+  className: "",
+  html: `<div style="
+    width:10px;height:10px;border-radius:999px;
+    background:#3b82f6;border:2px solid white;
+    box-shadow:0 2px 6px rgba(59,130,246,.5);
+  "></div>`,
+  iconSize: [10, 10],
+  iconAnchor: [5, 5],
+});
 
 type LandOnMap = {
   id: string;
@@ -234,12 +259,14 @@ function AddressSearch({
 
 export default function Map({
   lands = [],
+  marketListings = [],
   selectedLandId,
   onSelectLand,
   countryCenter,
   countryZoom,
 }: {
   lands: LandOnMap[];
+  marketListings?: MarketPin[];
   selectedLandId?: string | null;
   onSelectLand?: (id: string) => void;
   countryCenter?: [number, number];
@@ -250,6 +277,7 @@ export default function Map({
   const [drawReady, setDrawReady] = useState(false);
   const [drawVersion, setDrawVersion] = useState(0);
   const [tileLayer, setTileLayer] = useState<"street" | "satellite" | "terrain">("street");
+  const [showMarket, setShowMarket] = useState(true);
 
   const TILE_LAYERS = {
     street: {
@@ -349,6 +377,23 @@ export default function Map({
             ))}
           </div>
 
+          {/* Toggle market listings */}
+          {marketListings.length > 0 && (
+            <button
+              onClick={() => setShowMarket((s) => !s)}
+              style={{
+                padding: "8px 12px", borderRadius: 10, width: "100%",
+                border: showMarket ? "1px solid #3b82f6" : "1px solid #333",
+                background: showMarket ? "#0b1a30" : "#0b0b0b",
+                color: showMarket ? "#60a5fa" : "#64748b",
+                cursor: "pointer", fontSize: 12, fontWeight: showMarket ? 700 : 400,
+                textAlign: "left",
+              }}
+            >
+              📊 Piața ({marketListings.length})
+            </button>
+          )}
+
           <div style={{ borderTop: "1px solid #2a2a2a", paddingTop: 8 }}>
             <button
               onClick={openGoogleSearch}
@@ -418,6 +463,45 @@ export default function Map({
             },
           }}
         />
+      ))}
+
+      {showMarket && marketListings.map((m) => (
+        <Marker key={m.id} position={[m.lat, m.lng]} icon={marketIcon}>
+          <Popup maxWidth={260}>
+            <div style={{ fontFamily: "system-ui, sans-serif", fontSize: 13, minWidth: 200 }}>
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
+                  background: m.source === "olx" ? "#052e16" : "#0b1a30",
+                  color: m.source === "olx" ? "#4ade80" : "#60a5fa",
+                  border: `1px solid ${m.source === "olx" ? "#166534" : "#1e3a5f"}` }}>
+                  {m.source.toUpperCase()}
+                </span>
+              </div>
+              <div style={{ fontWeight: 700, marginBottom: 4, lineHeight: 1.3 }}>
+                {m.title.slice(0, 70)}{m.title.length > 70 ? "…" : ""}
+              </div>
+              <div style={{ display: "flex", gap: 12, fontSize: 12, marginBottom: 6 }}>
+                {m.price && (
+                  <span style={{ color: "#16a34a", fontWeight: 700 }}>
+                    {m.price.toLocaleString("ro-RO")} €
+                  </span>
+                )}
+                {m.areaM2 && <span style={{ color: "#555" }}>{m.areaM2} m²</span>}
+                {m.price && m.areaM2 && (
+                  <span style={{ color: "#888" }}>{Math.round(m.price / m.areaM2)} €/m²</span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: "#666", marginBottom: 6 }}>📍 {m.locality}</div>
+              {m.link && (
+                <a href={m.link} target="_blank" rel="noreferrer"
+                  style={{ display: "inline-block", padding: "5px 12px", background: "#1d4ed8",
+                    color: "#fff", borderRadius: 6, fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
+                  🔗 Vezi anunțul
+                </a>
+              )}
+            </div>
+          </Popup>
+        </Marker>
       ))}
     </MapContainer>
   );

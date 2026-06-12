@@ -44,6 +44,27 @@ model PriceHistory {
   land       Land     @relation(fields: [landId], references: [id], onDelete: Cascade)
 }
 
+model MarketListing {
+  id           String    @id @default(cuid())
+  externalId   String?
+  source       String
+  title        String
+  price        Float?
+  currency     String    @default("EUR")
+  locality     String
+  lat          Float
+  lng          Float
+  link         String?   @unique
+  description  String?
+  areaM2       Float?
+  propertyType String    @default("teren-intravilan")
+  imageUrl     String?
+  rooms        Int?
+  floor        Int?
+  scrapedAt    DateTime  @default(now())
+  publishedAt  DateTime?
+}
+
 model Alert {
   id             String    @id @default(cuid())
   locality       String
