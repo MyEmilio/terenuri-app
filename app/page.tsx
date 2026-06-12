@@ -685,6 +685,7 @@ export default function Home() {
   const [marketScanLocality, setMarketScanLocality] = useState("");
   const [marketScanType, setMarketScanType] = useState("teren-intravilan");
   const [marketScanning, setMarketScanning] = useState(false);
+  const [showMarketScan, setShowMarketScan] = useState(false);
   const [marketStats, setMarketStats] = useState<{
     total: number; avgPrice: number | null; minPrice: number | null; maxPrice: number | null; avgPriceM2: number | null;
   } | null>(null);
@@ -1285,7 +1286,7 @@ export default function Home() {
 
   // ====== RENDER ======
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+    <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
       {/* ===== SIDEBAR ===== */}
       <div style={{
         width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth,
@@ -1303,62 +1304,53 @@ export default function Home() {
           </div>
         ))}
 
-        {/* Selector țară */}
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 5 }}>🌍 Țară / Piață</div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {ALL_COUNTRIES.map(([code, c]) => (
-              <button key={code} onClick={() => {
-                setSelectedCountry(code);
-                setCountryFlyTarget({ center: c.center, zoom: c.zoom });
-                // Resetează filtre zonă la schimbarea țării
-                setAreaFilter(null);
-                setExternalResults([]);
-                setExternalLinks({});
-                setNewsSignals([]);
-              }}
-                title={c.name}
-                style={{
-                  padding: "4px 7px", borderRadius: 8, fontSize: 14, cursor: "pointer",
-                  border: selectedCountry === code ? "2px solid #f59e0b" : "1px solid #2a2a2a",
-                  background: selectedCountry === code ? "#2a1800" : "#0b0b0b",
-                  lineHeight: 1,
-                }}>
-                {c.flag}
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 4 }}>
-            {EUROPEAN_COUNTRIES[selectedCountry].flag} {EUROPEAN_COUNTRIES[selectedCountry].name} · {EUROPEAN_COUNTRIES[selectedCountry].currency}
-          </div>
-        </div>
+        {/* Header compact: logo + țară + tools */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 900, fontSize: 15, color: "#f59e0b", flexShrink: 0 }}>🏠 Invest</div>
 
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>🏠 Imobiliare Invest</div>
-          <div style={{ display: "flex", gap: 5 }}>
-            <button onClick={() => exportCSV(lands)} title="Export CSV"
-              style={{ ...btn, padding: "5px 8px", fontSize: 12 }}>📥 CSV</button>
-            <button onClick={() => { if (compareIds.length >= 2) setShowComparator(true); }}
-              title={compareIds.length < 2 ? "Selectează cel puțin 2 proprietăți" : "Compară"}
-              style={{ ...btn, padding: "5px 8px", fontSize: 12,
-                border: compareIds.length >= 2 ? "1px solid #f59e0b" : "1px solid #333",
-                color: compareIds.length >= 2 ? "#f59e0b" : "#555" }}>
-              ⚖️ {compareIds.length > 0 ? `(${compareIds.length})` : ""}
-            </button>
-            {compareIds.length > 0 && (
-              <button onClick={() => setCompareIds([])} title="Resetează selecție"
-                style={{ ...btn, padding: "5px 6px", fontSize: 11, color: "#f87171", borderColor: "#7f1d1d" }}>✕</button>
-            )}
-          </div>
+          {/* Dropdown țară */}
+          <select
+            value={selectedCountry}
+            onChange={(e) => {
+              const code = e.target.value as CountryCode;
+              const c = EUROPEAN_COUNTRIES[code];
+              setSelectedCountry(code);
+              setCountryFlyTarget({ center: c.center, zoom: c.zoom });
+              setAreaFilter(null);
+              setExternalResults([]);
+              setExternalLinks({});
+              setNewsSignals([]);
+            }}
+            style={{ flex: 1, padding: "5px 8px", borderRadius: 8, border: "1px solid #333", background: "#0b0b0b", color: "#f59e0b", fontSize: 12, fontWeight: 700 }}
+          >
+            {ALL_COUNTRIES.map(([code, c]) => (
+              <option key={code} value={code}>{c.flag} {c.name} · {c.currency}</option>
+            ))}
+          </select>
+
+          {/* Tools */}
+          <button onClick={() => exportCSV(lands)} title="Export CSV"
+            style={{ ...btn, padding: "5px 8px", fontSize: 12, flexShrink: 0 }}>📥</button>
+          <button onClick={() => { if (compareIds.length >= 2) setShowComparator(true); }}
+            title={compareIds.length < 2 ? "Selectează cel puțin 2" : "Compară"}
+            style={{ ...btn, padding: "5px 8px", fontSize: 12, flexShrink: 0,
+              border: compareIds.length >= 2 ? "1px solid #f59e0b" : "1px solid #333",
+              color: compareIds.length >= 2 ? "#f59e0b" : "#555" }}>
+            ⚖️{compareIds.length > 0 ? ` ${compareIds.length}` : ""}
+          </button>
+          {compareIds.length > 0 && (
+            <button onClick={() => setCompareIds([])}
+              style={{ ...btn, padding: "5px 6px", fontSize: 11, color: "#f87171", borderColor: "#7f1d1d", flexShrink: 0 }}>✕</button>
+          )}
         </div>
 
         {/* Tab-uri tip proprietate */}
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 8 }}>
           <button
             onClick={() => setTypeFilter("all")}
+            title="Toate tipurile"
             style={{
-              ...btn, padding: "5px 8px", fontSize: 11,
+              ...btn, padding: "4px 8px", fontSize: 11,
               background: typeFilter === "all" ? "#222" : "#0b0b0b",
               border: typeFilter === "all" ? "1px solid #555" : "1px solid #222",
               fontWeight: typeFilter === "all" ? 800 : 400,
@@ -1369,14 +1361,14 @@ export default function Home() {
             <button
               key={pt}
               onClick={() => setTypeFilter(pt)}
+              title={cfg.label}
               style={{
-                ...btn, padding: "5px 8px", fontSize: 11,
+                ...btn, padding: "4px 8px", fontSize: 13,
                 background: typeFilter === pt ? cfg.color + "33" : "#0b0b0b",
                 border: typeFilter === pt ? `1px solid ${cfg.color}` : "1px solid #222",
-                color: typeFilter === pt ? cfg.color : "#aaa",
-                fontWeight: typeFilter === pt ? 800 : 400,
+                color: typeFilter === pt ? cfg.color : "#777",
               }}>
-              {cfg.icon} {cfg.label}
+              {cfg.icon}
             </button>
           ))}
         </div>
@@ -1467,47 +1459,50 @@ export default function Home() {
           </button>
         )}
 
-        {/* ===== SCANARE PIAȚĂ ===== */}
-        <div style={{ background: "#0b1020", border: "1px solid #1e3a5f", borderRadius: 10, padding: "12px 12px", marginBottom: 10 }}>
-          <div style={{ fontWeight: 700, fontSize: 12, color: "#60a5fa", marginBottom: 8 }}>📊 Scanează piața</div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-            <input
-              value={marketScanLocality}
-              onChange={(e) => setMarketScanLocality(e.target.value)}
-              placeholder="Localitate (ex: Timișoara)"
-              style={{ flex: 1, padding: "7px 10px", borderRadius: 7, border: "1px solid #1e3a5f", background: "#0a0a0a", color: "#fff", fontSize: 12 }}
-            />
-          </div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <select value={marketScanType} onChange={(e) => setMarketScanType(e.target.value)}
-              style={{ flex: 1, padding: "7px 8px", borderRadius: 7, border: "1px solid #1e3a5f", background: "#0a0a0a", color: "#fff", fontSize: 11 }}>
-              {Object.entries(PROPERTY_TYPES).map(([k, v]) => (
-                <option key={k} value={k}>{v.icon} {v.label}</option>
-              ))}
-            </select>
-            <button onClick={scanMarket} disabled={marketScanning || !marketScanLocality.trim()}
-              style={{ ...btn, padding: "7px 12px", fontSize: 11, borderColor: "#1d4ed8", color: "#93c5fd", background: marketScanning ? "#0b1a30" : "#0b0b0b", opacity: !marketScanLocality.trim() ? 0.5 : 1 }}>
-              {marketScanning ? "⏳" : "🔍 Scan"}
-            </button>
-          </div>
-          {marketStats && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
-              {[
-                { label: "Anunțuri", value: String(marketStats.total) },
-                { label: "Preț mediu/m²", value: marketStats.avgPriceM2 ? `${marketStats.avgPriceM2.toLocaleString("ro-RO")} €` : "—" },
-                { label: "Min preț", value: marketStats.minPrice ? `${marketStats.minPrice.toLocaleString("ro-RO")} €` : "—" },
-                { label: "Max preț", value: marketStats.maxPrice ? `${marketStats.maxPrice.toLocaleString("ro-RO")} €` : "—" },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ background: "#080d14", borderRadius: 6, padding: "5px 8px" }}>
-                  <div style={{ fontSize: 9, color: "#475569" }}>{label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{value}</div>
+        {/* ===== SCANARE PIAȚĂ (colapsibil) ===== */}
+        <div style={{ border: "1px solid #1e3a5f", borderRadius: 10, marginBottom: 10, overflow: "hidden" }}>
+          <button onClick={() => setShowMarketScan((v) => !v)}
+            style={{ ...btn, width: "100%", textAlign: "left", borderRadius: 0, border: "none", background: "#0b1020", color: "#60a5fa", fontWeight: 700, fontSize: 12, padding: "9px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>📊 Piața imobiliară{marketListings.length > 0 ? ` · ${marketListings.length} anunțuri` : ""}</span>
+            <span style={{ fontSize: 10, opacity: 0.7 }}>{showMarketScan ? "▲" : "▼"}</span>
+          </button>
+          {showMarketScan && (
+            <div style={{ background: "#070d1a", padding: "10px 12px", borderTop: "1px solid #1e3a5f" }}>
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <input
+                  value={marketScanLocality}
+                  onChange={(e) => setMarketScanLocality(e.target.value)}
+                  placeholder="Localitate (ex: Timișoara)"
+                  style={{ flex: 1, padding: "7px 10px", borderRadius: 7, border: "1px solid #1e3a5f", background: "#0a0a0a", color: "#fff", fontSize: 12 }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                <select value={marketScanType} onChange={(e) => setMarketScanType(e.target.value)}
+                  style={{ flex: 1, padding: "7px 8px", borderRadius: 7, border: "1px solid #1e3a5f", background: "#0a0a0a", color: "#fff", fontSize: 11 }}>
+                  {Object.entries(PROPERTY_TYPES).map(([k, v]) => (
+                    <option key={k} value={k}>{v.icon} {v.label}</option>
+                  ))}
+                </select>
+                <button onClick={scanMarket} disabled={marketScanning || !marketScanLocality.trim()}
+                  style={{ ...btn, padding: "7px 12px", fontSize: 11, borderColor: "#1d4ed8", color: "#93c5fd", background: marketScanning ? "#0b1a30" : "#0b0b0b", opacity: !marketScanLocality.trim() ? 0.5 : 1 }}>
+                  {marketScanning ? "⏳" : "🔍 Scan"}
+                </button>
+              </div>
+              {marketStats && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
+                  {[
+                    { label: "Anunțuri", value: String(marketStats.total) },
+                    { label: "€/m² mediu", value: marketStats.avgPriceM2 ? `${marketStats.avgPriceM2.toLocaleString("ro-RO")} €` : "—" },
+                    { label: "Min", value: marketStats.minPrice ? `${marketStats.minPrice.toLocaleString("ro-RO")} €` : "—" },
+                    { label: "Max", value: marketStats.maxPrice ? `${marketStats.maxPrice.toLocaleString("ro-RO")} €` : "—" },
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ background: "#080d14", borderRadius: 6, padding: "5px 8px" }}>
+                      <div style={{ fontSize: 9, color: "#475569" }}>{label}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{value}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-          {marketListings.length > 0 && (
-            <div style={{ fontSize: 10, color: "#3b82f6", marginTop: 6 }}>
-              📍 {marketListings.length} pini albaștri pe hartă — click pe pin pentru detalii
+              )}
             </div>
           )}
         </div>

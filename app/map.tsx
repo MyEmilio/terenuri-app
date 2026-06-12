@@ -127,14 +127,11 @@ function AddressSearch({
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<{ display_name: string; lat: string; lon: string }[]>([]);
+  const [expanded, setExpanded] = useState(false);
 
   async function runSearch() {
     const query = q.trim();
-    if (!query) {
-      setItems([]);
-      return;
-    }
-
+    if (!query) { setItems([]); return; }
     setLoading(true);
     try {
       const url =
@@ -154,105 +151,74 @@ function AddressSearch({
     const lat = Number(it.lat);
     const lng = Number(it.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
     map.flyTo([lat, lng], Math.max(map.getZoom(), 15), { duration: 0.6 });
-
     if (selectedLandId) {
-      window.dispatchEvent(
-        new CustomEvent("markerMoved", {
-          detail: { id: selectedLandId, lat, lng },
-        })
-      );
+      window.dispatchEvent(new CustomEvent("markerMoved", { detail: { id: selectedLandId, lat, lng } }));
     }
     setItems([]);
+    setExpanded(false);
   }
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: 12,
-        left: 88,
-        zIndex: 2000,
-        width: 360,
-        maxWidth: "calc(100vw - 24px)",
-        pointerEvents: "none",
-      }}
-    >
-      <div
+    <div style={{ position: "absolute", top: 12, left: 88, zIndex: 2000, pointerEvents: "none" }}>
+      {/* Toggle button */}
+      <button
+        onClick={() => { setExpanded((v) => !v); }}
+        title="Caută adresă"
         style={{
-          background: "rgba(17,17,17,0.92)",
-          border: "1px solid #333",
-          borderRadius: 12,
-          padding: 10,
-          color: "#fff",
-          boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
-          backdropFilter: "blur(4px)",
-          pointerEvents: "auto",
+          pointerEvents: "auto", width: 38, height: 38, borderRadius: 10,
+          border: expanded ? "1px solid #f59e0b" : "1px solid #333",
+          background: expanded ? "#2a1800" : "rgba(17,17,17,0.92)",
+          color: expanded ? "#f59e0b" : "#fff", cursor: "pointer",
+          fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
         }}
       >
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Cauta adresa / oras / strada..."
-            onKeyDown={(e) => {
-              if (e.key === "Enter") runSearch();
-            }}
-            style={{
-              flex: 1,
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #333",
-              background: "#0b0b0b",
-              color: "#fff",
-              outline: "none",
-            }}
-          />
-          <button
-            onClick={runSearch}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #333",
-              background: "#0b0b0b",
-              color: "#fff",
-              cursor: "pointer",
-              minWidth: 92,
-            }}
-          >
-            {loading ? "..." : "Cauta"}
-          </button>
-        </div>
+        🔍
+      </button>
 
-        {items.length > 0 && (
-          <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-            {items.map((it, idx) => (
-              <button
-                key={idx}
-                onClick={() => choose(it)}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 10px",
-                  borderRadius: 10,
-                  border: "1px solid #333",
-                  background: "#0b0b0b",
-                  color: "#fff",
-                  cursor: "pointer",
-                  lineHeight: 1.25,
-                }}
-                title={it.display_name}
-              >
-                {it.display_name}
-              </button>
-            ))}
+      {/* Expanded panel */}
+      {expanded && (
+        <div style={{
+          pointerEvents: "auto", marginTop: 6, width: 320,
+          background: "rgba(17,17,17,0.95)", border: "1px solid #333",
+          borderRadius: 12, padding: 10, color: "#fff",
+          boxShadow: "0 12px 30px rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
+        }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Adresă / oraș / stradă..."
+              onKeyDown={(e) => { if (e.key === "Enter") runSearch(); }}
+              autoFocus
+              style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #333", background: "#0b0b0b", color: "#fff", outline: "none", fontSize: 13 }}
+            />
+            <button onClick={runSearch}
+              style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #333", background: "#0b0b0b", color: "#fff", cursor: "pointer", fontSize: 13 }}>
+              {loading ? "..." : "Go"}
+            </button>
           </div>
-        )}
 
-        <div style={{ fontSize: 12, opacity: 0.65, marginTop: 8 }}>
-          Tip: selecteaza un teren din lista inainte, ca sa-i mute pinul pe adresa.
+          {items.length > 0 && (
+            <div style={{ marginTop: 8, display: "grid", gap: 4, maxHeight: 240, overflowY: "auto" }}>
+              {items.map((it, idx) => (
+                <button key={idx} onClick={() => choose(it)}
+                  style={{ textAlign: "left", padding: "7px 9px", borderRadius: 8, border: "1px solid #2a2a2a", background: "#0b0b0b", color: "#e2e8f0", cursor: "pointer", fontSize: 12, lineHeight: 1.3 }}
+                  title={it.display_name}>
+                  {it.display_name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {selectedLandId && (
+            <div style={{ fontSize: 11, opacity: 0.5, marginTop: 6 }}>
+              Selectează un pin înainte ca să-i mute locația.
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -340,80 +306,58 @@ export default function Map({
   };
 
   return (
-    <MapContainer center={center} zoom={10} style={{ height: "100vh", width: "100%" }}>
+    <MapContainer center={center} zoom={10} style={{ height: "100%", width: "100%" }}>
       <AddressSearch selectedLandId={selectedLandId} />
 
-      <div style={{ position: "absolute", top: 12, right: 12, zIndex: 2000 }}>
-        <div
-          style={{
-            display: "grid",
-            gap: 8,
-            background: "rgba(17,17,17,0.92)",
-            border: "1px solid #333",
-            borderRadius: 10,
-            padding: 8,
-          }}
-        >
-          {/* Switcher straturi hartă */}
-          <div style={{ display: "grid", gap: 4 }}>
-            {(["street", "satellite", "terrain"] as const).map((key) => (
-              <button
-                key={key}
-                onClick={() => setTileLayer(key)}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: tileLayer === key ? "1px solid #f59e0b" : "1px solid #333",
-                  background: tileLayer === key ? "#2a1800" : "#0b0b0b",
-                  color: tileLayer === key ? "#f59e0b" : "#ccc",
-                  cursor: "pointer",
-                  fontWeight: tileLayer === key ? 700 : 400,
-                  fontSize: 13,
-                  textAlign: "left",
-                }}
-              >
-                {TILE_LAYERS[key].label}
-              </button>
-            ))}
-          </div>
+      {/* Panel dreapta — compact, colapsibil */}
+      <div style={{ position: "absolute", top: 12, right: 12, zIndex: 2000, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+        {/* Tile switcher — 3 icon butoane */}
+        <div style={{ display: "flex", gap: 4, background: "rgba(17,17,17,0.9)", border: "1px solid #333", borderRadius: 10, padding: 5 }}>
+          {(["street", "satellite", "terrain"] as const).map((key) => (
+            <button
+              key={key}
+              onClick={() => setTileLayer(key)}
+              title={TILE_LAYERS[key].label}
+              style={{
+                width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 15,
+                border: tileLayer === key ? "1px solid #f59e0b" : "1px solid transparent",
+                background: tileLayer === key ? "#2a1800" : "transparent",
+                color: tileLayer === key ? "#f59e0b" : "#999",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              {key === "street" ? "🗺️" : key === "satellite" ? "🛰️" : "⛰️"}
+            </button>
+          ))}
+        </div>
 
-          {/* Toggle market listings */}
-          {marketListings.length > 0 && (
-            <button
-              onClick={() => setShowMarket((s) => !s)}
-              style={{
-                padding: "8px 12px", borderRadius: 10, width: "100%",
-                border: showMarket ? "1px solid #3b82f6" : "1px solid #333",
-                background: showMarket ? "#0b1a30" : "#0b0b0b",
-                color: showMarket ? "#60a5fa" : "#64748b",
-                cursor: "pointer", fontSize: 12, fontWeight: showMarket ? 700 : 400,
-                textAlign: "left",
-              }}
-            >
-              📊 Piața ({marketListings.length})
-            </button>
-          )}
+        {/* Toggle market listings */}
+        {marketListings.length > 0 && (
+          <button
+            onClick={() => setShowMarket((s) => !s)}
+            title={showMarket ? "Ascunde anunțuri piață" : "Arată anunțuri piață"}
+            style={{
+              padding: "5px 10px", borderRadius: 8,
+              border: showMarket ? "1px solid #3b82f6" : "1px solid #333",
+              background: showMarket ? "#0b1a30" : "rgba(17,17,17,0.9)",
+              color: showMarket ? "#60a5fa" : "#64748b",
+              cursor: "pointer", fontSize: 12, fontWeight: showMarket ? 700 : 400,
+            }}
+          >
+            📊 {marketListings.length}
+          </button>
+        )}
 
-          <div style={{ borderTop: "1px solid #2a2a2a", paddingTop: 8 }}>
-            <button
-              onClick={openGoogleSearch}
-              style={{
-                padding: "8px 12px", borderRadius: 10, width: "100%",
-                border: "1px solid #333", background: "#0b0b0b", color: "#fff", cursor: "pointer", fontSize: 12,
-              }}
-            >
-              🔍 Google în zonă
-            </button>
-            <button
-              onClick={clearArea}
-              style={{
-                marginTop: 5, padding: "7px 12px", borderRadius: 10, width: "100%",
-                border: "1px solid #555", background: "#141414", color: "#ddd", cursor: "pointer", fontSize: 12,
-              }}
-            >
-              ✕ Resetează zona
-            </button>
-          </div>
+        {/* Google search + clear zone */}
+        <div style={{ display: "flex", gap: 4 }}>
+          <button onClick={openGoogleSearch} title="Caută pe Google în zonă"
+            style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #333", background: "rgba(17,17,17,0.9)", color: "#fff", cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            🌐
+          </button>
+          <button onClick={clearArea} title="Resetează zona selectată"
+            style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #444", background: "rgba(17,17,17,0.9)", color: "#aaa", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            ✕
+          </button>
         </div>
       </div>
 

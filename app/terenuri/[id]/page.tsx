@@ -137,9 +137,9 @@ function PriceChart({ points }: { points: PricePoint[] }) {
   );
 }
 
-const card = { background: "#111", border: "1px solid #222", borderRadius: 12, padding: "16px 18px" } as const;
-const inputDark = { padding: "8px 12px", borderRadius: 10, border: "1px solid #333", background: "#0b0b0b", color: "#fff", width: "100%", boxSizing: "border-box" as const };
-const btn = { padding: "10px 18px", borderRadius: 10, border: "1px solid #333", background: "#0b0b0b", color: "#fff", fontWeight: 600, fontSize: 14, cursor: "pointer" } as const;
+const card = { background: "#111", border: "1px solid #222", borderRadius: 12, padding: "14px 16px" } as const;
+const inputDark = { padding: "8px 12px", borderRadius: 10, border: "1px solid #333", background: "#0b0b0b", color: "#fff", width: "100%", boxSizing: "border-box" as const, fontSize: 16 };
+const btn = { padding: "10px 16px", borderRadius: 10, border: "1px solid #333", background: "#0b0b0b", color: "#fff", fontWeight: 600, fontSize: 14, cursor: "pointer" } as const;
 
 export default function LandDetailPage() {
   const params = useParams();
@@ -258,13 +258,13 @@ export default function LandDetailPage() {
   }
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16 }}>
+    <div style={{ minHeight: "100%", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 16 }}>
       ⏳ Se încarcă...
     </div>
   );
 
   if (error || !land) return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: "#fff" }}>
+    <div style={{ minHeight: "100%", background: "#0a0a0a", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: "#fff" }}>
       <div style={{ fontSize: 48 }}>⚠️</div>
       <div style={{ fontSize: 18 }}>{error ?? "Teren negăsit"}</div>
       <Link href="/" style={{ color: "#60a5fa", textDecoration: "none" }}>← Înapoi la hartă</Link>
@@ -280,16 +280,15 @@ export default function LandDetailPage() {
     ? Math.round(((land.marketPrice - land.negotiatedPrice) / land.marketPrice) * 100) : null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif" }}>
-      {/* Titlu pagină */}
-      <div style={{ padding: "10px 20px", background: "#111", borderBottom: "1px solid #1e1e1e", display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 12, color: "#64748b" }}>Detaliu proprietate</span>
-      </div>
+    <div style={{ minHeight: "100%", background: "#0a0a0a", color: "#fff", fontFamily: "system-ui, sans-serif" }}>
 
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 16px", display: "grid", gap: 18 }}>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "16px 12px", display: "grid", gap: 14 }}>
 
         {/* Titlu */}
         <div>
+          <Link href="/" style={{ fontSize: 12, color: "#475569", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
+            ← Înapoi la hartă
+          </Link>
           <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: cfg.color + "33", color: cfg.color, border: `1px solid ${cfg.color}55` }}>
               {cfg.icon} {cfg.label}
@@ -299,7 +298,7 @@ export default function LandDetailPage() {
               : <span style={{ fontSize: 11, color: "#fbbf24", background: "#1c1300", border: "1px solid #713f12", borderRadius: 20, padding: "3px 10px" }}>⏳ Neconfirmat</span>
             }
           </div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900, lineHeight: 1.2 }}>{land.title}</h1>
+          <h1 style={{ margin: 0, fontSize: "clamp(18px, 5vw, 26px)", fontWeight: 900, lineHeight: 1.2 }}>{land.title}</h1>
           <div style={{ color: "#94a3b8", marginTop: 6, fontSize: 14 }}>📍 {land.locality}</div>
           <div style={{ color: "#475569", marginTop: 3, fontSize: 12 }}>
             Adăugat: {new Date(land.createdAt).toLocaleDateString("ro-RO", { day: "2-digit", month: "long", year: "numeric" })}
@@ -307,7 +306,7 @@ export default function LandDetailPage() {
         </div>
 
         {/* Metrici cheie */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
           {([
             { label: "Preț negociat", value: land.negotiatedPrice ? `${land.negotiatedPrice.toLocaleString("ro-RO")} €` : "—", color: "#4ade80" },
             { label: "Preț piață", value: land.marketPrice ? `${land.marketPrice.toLocaleString("ro-RO")} €` : "—", color: "#94a3b8" },
@@ -456,7 +455,7 @@ export default function LandDetailPage() {
         {/* Detalii complete */}
         <div style={card}>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>📋 Detalii complete</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 24px", fontSize: 13 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px 20px", fontSize: 13 }}>
             {([
               { label: "Tip proprietate", value: `${cfg.icon} ${cfg.label}` },
               { label: "Localitate", value: land.locality },
@@ -479,7 +478,7 @@ export default function LandDetailPage() {
         </div>
 
         {/* Acțiuni */}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", paddingBottom: 48 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingBottom: 32 }}>
           {land.link && (
             <a href={land.link} target="_blank" rel="noreferrer"
               style={{ ...btn, color: "#60a5fa", borderColor: "#1e3a8a", textDecoration: "none" }}>
@@ -504,7 +503,7 @@ export default function LandDetailPage() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}
           onClick={() => setIsEditing(false)}>
           <div onClick={(e) => e.stopPropagation()}
-            style={{ background: "#111", color: "#fff", padding: 24, minWidth: 400, maxWidth: "90vw", maxHeight: "90vh", overflowY: "auto", borderRadius: 16, border: "1px solid #222", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
+            style={{ background: "#111", color: "#fff", padding: "20px 16px", width: "min(480px, 92vw)", maxHeight: "88dvh", overflowY: "auto", borderRadius: 16, border: "1px solid #222", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
             <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>✏️ Editează proprietate</h3>
             <div style={{ display: "grid", gap: 10 }}>
               <select value={editType} onChange={(e) => setEditType(e.target.value)} style={inputDark}>
